@@ -15,7 +15,7 @@ orderRouter.post('/orders',async (req:Request,res:Response)=>{
     if(!result.success){
         return res.status(400).json({
             message:'Invalid result data',
-            erros:result.error.format(),
+            errors:result.error.format(),
         });
     }
 
@@ -50,9 +50,10 @@ orderRouter.post('/orders',async (req:Request,res:Response)=>{
 })
 
 orderRouter.get('/orders',async (req:Request,res:Response)=>{
-    
     try{
-        const allOrders = await prisma.order.findMany();
+        const allOrders = await prisma.order.findMany({
+            include:{items:true}
+        });
 
         return res.status(200).json({
             orders:allOrders,
@@ -82,7 +83,8 @@ orderRouter.get('/orders/:id',async (req:Request,res:Response)=>{
         const order = await prisma.order.findUnique({
             where:{
                 id:id,
-            }
+            },
+            include:{items:true}
         })
 
         if(!order){
