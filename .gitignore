@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.agents/
+.claude/
+.windsurf/
+
+# Production Build Output
+/dist
+/build
+
+# Environment variables & secrets
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Prisma Generated Client
+/src/generated/prisma
+
+# Local SQLite databases (Optional safety net)
+*.db
+*.db-journal
+
+# System files
+.DS_Store
+Thumbs.db
