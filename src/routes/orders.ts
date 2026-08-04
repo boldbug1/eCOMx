@@ -5,7 +5,7 @@ import { prisma } from '../db/prisma.js';
 const orderRouter:Router = express.Router();
 
 
-orderRouter.post('/order',async (req:Request,res:Response)=>{
+orderRouter.post('/orders',async (req:Request,res:Response)=>{
     const result = OrderSchema.safeParse(req.body);
 
     if(!result.success){
@@ -48,9 +48,10 @@ orderRouter.post('/order',async (req:Request,res:Response)=>{
 orderRouter.get('/orders',async (req:Request,res:Response)=>{
     
     try{
-        const allOrders = await prisma.order.findMany;
+        const allOrders = await prisma.order.findMany();
 
         return res.status(200).json({
+            orders:allOrders,
             message:"All orders were loaded succesfully"
         })
     }catch(e){

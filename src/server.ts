@@ -12,8 +12,9 @@ app.get('/',(req:Request,res:Response)=>{
     })
 })
 
-app.use('/api/v1',orderRouter);
+app.use(express.json())
 app.use(logger);
+app.use('/api/v1',orderRouter);
 
 
 app.listen('3000',()=>{

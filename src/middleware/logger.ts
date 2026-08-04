@@ -1,9 +1,12 @@
-import express from 'express'
-import type { Request,Response,NextFunction} from 'express'
+import type { Request, Response, NextFunction } from 'express';
 
-function logger(req:Request,res:Response,next:NextFunction){
-    console.log(req.header);
-    console.log(req.body);
+function logger(req: Request, res: Response, next: NextFunction) {
+    const timestamp = new Date().toISOString();
+    
+    console.log(`\n[${timestamp}] ${req.method} ${req.originalUrl}`);
+    console.log('Headers:', req.headers);
+    console.log('Body:', req.body);
+    
     next();
 }
 
