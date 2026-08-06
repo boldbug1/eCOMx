@@ -5,8 +5,7 @@ import { Permission } from '../permissions.js';
 
 export const requirePermission = (permission: Permission) =>
   (req: AuthRequest, res: Response, next: NextFunction) => {
-    // order matters: requireAuth runs FIRST, so req.user should be set
-    if (!req.user) return 401;                          // not authenticated
-    if (!ROLE_PERMISSIONS[req.user.role].includes(permission)) return 403;  // authenticated, not allowed
+    if (!req.user) return 401;
+    if (!ROLE_PERMISSIONS[req.user.role].includes(permission)) return 403;
     next();
   };
