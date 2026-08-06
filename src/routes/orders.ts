@@ -7,9 +7,10 @@ import {z} from 'zod'
 import { Prisma } from '@prisma/client';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requirePermission } from '../middleware/requirePermission.js';
+import { PERMISSIONS } from '../permissions.js';
 
 
-orderRouter.post('/orders',requireAuth,requirePermission,async (req:Request,res:Response)=>{
+orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.create),async (req:Request,res:Response)=>{
     const result = OrderSchema.safeParse(req.body);
 
     if(!result.success){
@@ -104,7 +105,7 @@ orderRouter.get('/orders/:id',async (req:Request,res:Response)=>{
     }
 })
 
-orderRouter.patch('/orders/:id',requireAuth,requirePermission,async (req:Request,res:Response)=>{
+orderRouter.patch('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.update),async (req:Request,res:Response)=>{
 try{
     let id =req.params.id as string; 
 
@@ -169,7 +170,7 @@ try{
     }
 })
 
-orderRouter.delete('/orders/:id',requireAuth,requirePermission,async (req:Request,res:Response)=>{
+orderRouter.delete('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.delete),async (req:Request,res:Response)=>{
     try{
         const id = req.params.id as string;
 

@@ -31,11 +31,7 @@ authRouter.post('/register',async (req:Request,res:Response)=>{
 
         if(!process.env.JWT_SECRET){throw new Error("Missing JWT_SECRET")}
 
-        const token = jwt.sign(
-            {sub:user.id,role:user.role},
-            process.env.JWT_SECRET,
-            {expiresIn:'1hr'}
-        )
+        const token = signToken(user);
 
         return res.status(201).json({
             message:'User registered'
