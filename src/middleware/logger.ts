@@ -1,13 +1,26 @@
-import type { Request, Response, NextFunction } from 'express';
-//to-do
-function logger(req: Request, res: Response, next: NextFunction) {
-    const timestamp = new Date().toISOString();
-    
-    console.log(`\n[${timestamp}] ${req.method} ${req.originalUrl}`);
-    console.log('Headers:', req.headers);
-    console.log('Body:', req.body);
-    
-    next();
-}
+import { Request, Response, NextFunction } from 'express';
 
-export default logger;
+export const logger = (req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const { method, originalUrl } = req;
+    const { statusCode } = res;
+
+    // Pick color based on HTTP status code
+    let statusColor = '\x1b[32m'; // Green (2xx)
+    if (statusCode >= 500) statusColor = '\x1b[31m'; // Red (5xx)
+    else if (statusCode >= 400) statusColor = '\x1b[33m'; // Yellow (4xx)
+    else if (statusCode >= 300) statusColor = '\x1b[36m'; // Cyan (3xx)
+
+    const reset = '\x1b[0m';
+    const timestamp = new Date().toLocaleTimeString();
+
+    console.log(
+      `[${timestamp}] ${method} ${originalUrl} ${statusColor}${statusCode}${reset} - ${duration}ms`
+    );
+  });
+
+  next();
+};

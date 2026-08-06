@@ -1,12 +1,3 @@
-// export interface Order {
-//     id:number,
-//     product_name:string,
-//     created_at:Date,
-//     quantity:number,
-//     expected:Date,
-//     status:"Shipping"|"Delivered"|"Canceled"
-// }
-
 import {z} from 'zod';
 
 export const OrderSchema = z.object({
