@@ -4,6 +4,7 @@ import orderRouter from './routes/orders.js';
 import logger from './middleware/logger.js';
 
 const app:Application = express();
+const PORT = process.env.PORT ?process.env.PORT:3000
 
 app.get('/',(req:Request,res:Response)=>{
     return res.status(200).json({
@@ -17,7 +18,7 @@ app.use(logger);
 app.use('/api/v1',orderRouter);
 
 
-app.listen('3000',()=>{
+app.listen(PORT,()=>{
     console.log("Server started....");
 });
 

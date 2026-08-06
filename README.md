@@ -1,4 +1,4 @@
-# Amazon API
+# Ecommerce API
 
 A REST API for managing customer orders, built with **Express**, **TypeScript**, **Prisma ORM 7**, and **Zod**.
 

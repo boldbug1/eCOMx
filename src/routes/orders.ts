@@ -2,8 +2,6 @@ import express from 'express';
 import {Request,Response,Router} from 'express'
 import {OrderSchema} from "../types/order.js"
 import { prisma } from '../db/prisma.js';
-import { number } from 'zod';
-import { error } from 'node:console';
 const orderRouter:Router = express.Router();
 import {z} from 'zod'
 import { Prisma } from '@prisma/client';
@@ -112,12 +110,6 @@ try{
         id = id[0]
     }
 
-    if(typeof id != 'string' && !id){
-        return res.status(400).json({
-            message:"Invlaid Id format."
-        })
-    }
-
     const patchSchema = OrderSchema.partial();
     const validatedData = patchSchema.parse(req.body);
 
@@ -129,7 +121,7 @@ try{
 
     const {items,...otherFields} = validatedData;
 
-    const prismaUpdateData:any = {...otherFields};
+    const prismaUpdateData:Prisma.OrderUpdateInput = {...otherFields};
 
     if(items){
         prismaUpdateData.items = {
@@ -151,14 +143,8 @@ try{
             include:{items:true}
         });
 
-        if(!updatedOrder){
-            return res.status(404).json({
-                message:"Order to be updated not found"
-            })
-        }
-
         return res.status(200).json({
-            updated_order:updatedOrder,
+            order:updatedOrder,
             message:"Order updated successfully"
         })
     }catch(e){
@@ -178,6 +164,34 @@ try{
         return res.status(500).json({
             message: "Internal server error"
         });
+    }
+})
+
+orderRouter.delete('/orders/:id',async (req:Request,res:Response)=>{
+    try{
+        const id = req.params.id as string;
+
+        const deletedOrder = await prisma.order.delete({
+            where:{
+                id:id,
+            }
+        })
+
+        return res.status(200).json({
+            message:"Deleted succesfully"
+        })
+    }catch(e){
+        if(e instanceof Prisma.PrismaClientKnownRequestError){
+            if(e.code === 'P2025'){
+                return res.status(404).json({
+                    message:"Order to be deleted not found"
+                })
+            }
+        }
+
+        return res.status(500).json({
+            message:"Internal server error",
+        })
     }
 })
 
