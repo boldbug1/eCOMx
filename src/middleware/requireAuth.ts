@@ -1,9 +1,9 @@
-import express from 'express'
 import { Request,Response,NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import { Role } from '@prisma/client';
 
-interface AuthRequest extends Request{
-    user?:{id:string,role:string}
+export interface AuthRequest extends Request{
+    user?:{id:string,role:Role}
 }
 
 export function requireAuth(req:AuthRequest,res:Response,next:NextFunction){
@@ -23,7 +23,7 @@ export function requireAuth(req:AuthRequest,res:Response,next:NextFunction){
 
         req.user = {
             id:payload.sub,
-            role:payload.role
+            role:payload.role as Role
         }
         next();
     }catch(e){
