@@ -5,12 +5,12 @@ import { prisma } from '../db/prisma.js';
 const orderRouter:Router = express.Router();
 import {z} from 'zod'
 import { Prisma } from '@prisma/client';
-import { requireAuth } from '../middleware/requireAuth.js';
+import { AuthRequest, requireAuth } from '../middleware/requireAuth.js';
 import { requirePermission } from '../middleware/requirePermission.js';
 import { PERMISSIONS } from '../permissions.js';
 
 
-orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.create),async (req:Request,res:Response)=>{
+orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.create),async (req:AuthRequest,res:Response)=>{
     const result = OrderSchema.safeParse(req.body);
 
     if(!result.success){
@@ -31,6 +31,7 @@ orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.crea
                 items:{
                     create:validatedOrder.items,
                 },
+                userId:req.user!.id,
             },
 
             include:{
@@ -50,9 +51,12 @@ orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.crea
     }
 })
 
-orderRouter.get('/orders',async (req:Request,res:Response)=>{
+orderRouter.get('/orders',requireAuth,async (req:AuthRequest,res:Response)=>{
     try{
         const allOrders = await prisma.order.findMany({
+            where:{
+                userId:req.user!.id
+            },
             include:{items:true}
         });
 
@@ -69,7 +73,7 @@ orderRouter.get('/orders',async (req:Request,res:Response)=>{
 
 })
 
-orderRouter.get('/orders/:id',async (req:Request,res:Response)=>{
+orderRouter.get('/orders/:id',requireAuth,async (req:AuthRequest,res:Response)=>{
     try{
          let id = req.params.id;
 
@@ -84,6 +88,7 @@ orderRouter.get('/orders/:id',async (req:Request,res:Response)=>{
         const order = await prisma.order.findUnique({
             where:{
                 id:id,
+                userId:req.user!.id,
             },
             include:{items:true}
         })
@@ -105,7 +110,7 @@ orderRouter.get('/orders/:id',async (req:Request,res:Response)=>{
     }
 })
 
-orderRouter.patch('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.update),async (req:Request,res:Response)=>{
+orderRouter.patch('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.update),async (req:AuthRequest,res:Response)=>{
 try{
     let id =req.params.id as string; 
 
@@ -138,15 +143,16 @@ try{
     }
 
     
-        const updatedOrder = await prisma.order.update({
+    const updatedOrder = await prisma.order.update({
             where:{
                 id:id,
+                userId:req.user!.id,
             },
             data:prismaUpdateData,
             include:{items:true}
         });
 
-        return res.status(200).json({
+    return res.status(200).json({
             order:updatedOrder,
             message:"Order updated successfully"
         })
@@ -170,17 +176,18 @@ try{
     }
 })
 
-orderRouter.delete('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.delete),async (req:Request,res:Response)=>{
+orderRouter.delete('/orders/:id',requireAuth,requirePermission(PERMISSIONS.orders.delete),async (req:AuthRequest,res:Response)=>{
     try{
         const id = req.params.id as string;
 
         const deletedOrder = await prisma.order.delete({
             where:{
                 id:id,
+                userId:req.user!.id,
             }
         })
 
-        return res.status(200).json({
+    return res.status(200).json({
             message:"Deleted succesfully"
         })
     }catch(e){
