@@ -11,9 +11,15 @@ let adminId: string;
 let ownerToken: string;
 let otherToken: string;
 let adminToken: string;
+
 let ownerOrderId: string;
 let otherOrderId: string;
 let adminOrderId: string;
+
+// Seeded products (created via the ADMIN API so the routes are exercised too)
+let widget: { id: string; price: number; stock: number }; // stock 10, price 49.99
+let widgetB: { id: string; price: number };                // stock 5,  price 10
+let lowStock: { id: string; stock: number };               // stock 2,  price 20
 
 const unique = Date.now().toString(36);
 const emails = {
@@ -21,7 +27,6 @@ const emails = {
   other: `other-${unique}@test.com`,
   admin: `admin-${unique}@test.com`,
 };
-
 const password = 'testpassword123';
 
 async function register(email: string) {
@@ -35,12 +40,20 @@ async function login(email: string) {
   return res.body.user.token as string;
 }
 
-function validOrderBody() {
+function orderBody(productId: string, qty = 1) {
   return {
     customerName: 'John Doe',
-    totalAmount: 99.99,
-    items: [{ productId: 'prod-1', quantity: 2, price: 49.99 }],
+    items: [{ productId, quantity: qty }],
   };
+}
+
+async function createStandaloneProduct(name: string, price: number, stock: number) {
+  const res = await request(app)
+    .post(`${API}/products`)
+    .set('Authorization', `Bearer ${adminToken}`)
+    .send({ name, description: `${name} description`, price, stock });
+  expect(res.status).toBe(201);
+  return res.body.product as { id: string; price: number; stock: number };
 }
 
 beforeAll(async () => {
@@ -58,22 +71,39 @@ beforeAll(async () => {
   otherToken = await login(emails.other);
   adminToken = await login(emails.admin);
 
+  const createProduct = async (name: string, price: number, stock: number) => {
+    const res = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name, description: `${name} description`, price, stock });
+    expect(res.status).toBe(201);
+    return res.body.product;
+  };
+
+  widget = await createProduct('Widget A', 49.99, 10);
+  widgetB = await createProduct('Widget B', 10, 5);
+  lowStock = await createProduct('Rare Widget', 20, 2);
+
+  await request(app)
+    .post(`${API}/orders`)
+    .set('Authorization', `Bearer ${ownerToken}`)
+    .send(orderBody(widget.id, 2));
   const ownerOrder = await request(app)
     .post(`${API}/orders`)
     .set('Authorization', `Bearer ${ownerToken}`)
-    .send(validOrderBody());
+    .send(orderBody(widgetB.id, 1));
   ownerOrderId = ownerOrder.body.order.id;
 
   const otherOrder = await request(app)
     .post(`${API}/orders`)
     .set('Authorization', `Bearer ${otherToken}`)
-    .send(validOrderBody());
+    .send(orderBody(widgetB.id, 1));
   otherOrderId = otherOrder.body.order.id;
 
   const adminOrder = await request(app)
     .post(`${API}/orders`)
     .set('Authorization', `Bearer ${adminToken}`)
-    .send(validOrderBody());
+    .send(orderBody(widget.id, 1));
   adminOrderId = adminOrder.body.order.id;
 });
 
@@ -81,6 +111,7 @@ afterAll(async () => {
   await prisma.order.deleteMany({
     where: { userId: { in: [ownerId, otherId, adminId] } },
   });
+  await prisma.product.deleteMany({ where: { createdById: { in: [adminId] } } });
   await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } });
   await prisma.$disconnect();
 });
@@ -114,14 +145,14 @@ describe('Auth', () => {
   it('login with unknown email returns 401', async () => {
     const res = await request(app)
       .post(`${API}/login`)
-      .send({ email: 'nobody@test.com', password });
+      .send({ email: 'nobody@test.com', password: 'testpassword123' });
     expect(res.status).toBe(401);
   });
 
   it('login with valid credentials returns a token', async () => {
     const res = await request(app)
       .post(`${API}/login`)
-      .send({ email: emails.owner, password });
+      .send({ email: emails.owner, password: 'testpassword123' });
     expect(res.status).toBe(200);
     expect(res.body.user.token).toBeDefined();
   });
@@ -131,11 +162,12 @@ describe('Orders - authentication', () => {
   it.each([
     ['POST', 'orders'],
     ['GET', 'orders'],
-    ['GET', 'orders/some-id'],
-    ['PATCH', 'orders/some-id'],
-    ['DELETE', 'orders/some-id'],
+    ['GET', 'orders/:id'],
+    ['PATCH', 'orders/:id'],
+    ['DELETE', 'orders/:id'],
   ])('%s /%s without a token returns 401', async (method, path) => {
-    const res = await request(app)[method.toLowerCase() as 'post'](`${API}/${path}`);
+    const url = path === 'orders/:id' ? `${API}/orders/unknown` : `${API}/${path}`;
+    const res = await request(app)[method.toLowerCase() as 'post' | 'get' | 'patch' | 'delete'](url);
     expect(res.status).toBe(401);
   });
 
@@ -143,7 +175,7 @@ describe('Orders - authentication', () => {
     const res = await request(app)
       .post(`${API}/orders`)
       .set('Authorization', 'Bearer not.a.real.token')
-      .send(validOrderBody());
+      .send(orderBody(widget.id));
     expect(res.status).toBe(401);
   });
 });
@@ -153,11 +185,10 @@ describe('Orders - create', () => {
     const res = await request(app)
       .post(`${API}/orders`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send(validOrderBody());
+      .send(orderBody(widget.id, 1));
 
     expect(res.status).toBe(201);
     expect(res.body.order.userId).toBe(ownerId);
-    expect(res.body.order.items).toHaveLength(1);
   });
 
   it('returns 400 for an invalid body', async () => {
@@ -167,6 +198,50 @@ describe('Orders - create', () => {
       .send({ customerName: 'No items here' });
 
     expect(res.status).toBe(400);
+  });
+
+  it('snapshots the DB price, not anything client-sent', async () => {
+    const res = await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ customerName: 'Jane', items: [{ productId: widgetB.id, quantity: 1 }] });
+
+    expect(res.status).toBe(201);
+    expect(res.body.order.totalAmount).toBeCloseTo(widgetB.price, 2);
+    expect(res.body.order.items[0].price).toBeCloseTo(widgetB.price, 2);
+  });
+
+  it('rejects an order with a nonexistent product: 400', async () => {
+    const res = await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ customerName: 'Jane', items: [{ productId: '00000000-0000-0000-0000-000000000000', quantity: 1 }] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects overselling: buying more than stock returns 400', async () => {
+    const res = await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ customerName: 'Jane', items: [{ productId: lowStock.id, quantity: 99 }] });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/left/);
+  });
+
+  it('decrements product stock after a purchase', async () => {
+    const product = await createStandaloneProduct('Decrement Widget', 5, 10);
+    const orderRes = await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ customerName: 'Jane', items: [{ productId: product.id, quantity: 3 }] });
+
+    expect(orderRes.status).toBe(201);
+
+    const productRes = await request(app).get(`${API}/products/${product.id}`);
+    expect(productRes.status).toBe(200);
+    expect(productRes.body.product.stock).toBe(7);
   });
 });
 
@@ -228,7 +303,7 @@ describe('Orders - permissions (USER)', () => {
 });
 
 describe('Orders - update (ADMIN)', () => {
-  it('updates the own order', async () => {
+  it('updates the own order (status)', async () => {
     const res = await request(app)
       .patch(`${API}/orders/${adminOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -238,24 +313,32 @@ describe('Orders - update (ADMIN)', () => {
     expect(res.body.order.status).toBe('processing');
   });
 
-  it('PATCH {} applies the status default (route quirk)', async () => {
+  it('replaces items with server-price snapshots', async () => {
     const res = await request(app)
       .patch(`${API}/orders/${adminOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
+      .send({ items: [{ productId: widgetB.id, quantity: 2 }] });
 
-    // OrderSchema.partial() keeps status' `.default("pending")`, so an empty
-    // body parses to { status: "pending" }; the route's empty-body guard
-    // (Object.keys(validatedData).length === 0) therefore never fires.
     expect(res.status).toBe(200);
-    expect(res.body.order.status).toBe('pending');
+    expect(res.body.order.items).toHaveLength(1);
+    expect(res.body.order.items[0].productId).toBe(widgetB.id);
+    expect(res.body.order.items[0].price).toBeCloseTo(widgetB.price, 2);
+  });
+
+  it('rejects an item replacement with a nonexistent product: 400', async () => {
+    const res = await request(app)
+      .patch(`${API}/orders/${adminOrderId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ items: [{ productId: '00000000-0000-0000-0000-000000000000', quantity: 1 }] });
+
+    expect(res.status).toBe(400);
   });
 
   it('rejects an invalid body with 400', async () => {
     const res = await request(app)
       .patch(`${API}/orders/${adminOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ totalAmount: -5 });
+      .send({ status: 'not-a-valid-status' });
 
     expect(res.status).toBe(400);
   });
@@ -267,17 +350,6 @@ describe('Orders - update (ADMIN)', () => {
       .send({ status: 'processing' });
 
     expect(res.status).toBe(404);
-  });
-
-  it('replaces items when items are sent', async () => {
-    const res = await request(app)
-      .patch(`${API}/orders/${adminOrderId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ items: [{ productId: 'prod-2', quantity: 1, price: 10 }] });
-
-    expect(res.status).toBe(200);
-    expect(res.body.order.items).toHaveLength(1);
-    expect(res.body.order.items[0].productId).toBe('prod-2');
   });
 });
 
@@ -303,6 +375,146 @@ describe('Orders - delete (ADMIN)', () => {
       .delete(`${API}/orders/${adminOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Products - catalog (public)', () => {
+  it('GET /products works without a token', async () => {
+    const res = await request(app).get(`${API}/products`);
+    expect(res.status).toBe(200);
+    const ids = res.body.products.map((p: { id: string }) => p.id);
+    expect(ids).toContain(widget.id);
+  });
+
+  it('GET /products/:id works without a token', async () => {
+    const res = await request(app).get(`${API}/products/${widget.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.product.price).toBeCloseTo(49.99, 2);
+  });
+
+  it('GET /products/:id of a nonexistent product returns 404', async () => {
+    const res = await request(app).get(`${API}/products/00000000-0000-0000-0000-000000000000`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('Products - create', () => {
+  it('requires a token: 401', async () => {
+    const res = await request(app).post(`${API}/products`).send({});
+    expect(res.status).toBe(401);
+  });
+
+  it('USER cannot create a product: 403', async () => {
+    const res = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Nope', description: 'x', price: 1, stock: 1 });
+    expect(res.status).toBe(403);
+  });
+
+  it('ADMIN creates a product stamped with their id', async () => {
+    const res = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Unique Gadget', description: 'made in tests', price: 19.99, stock: 4 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.product.createdById).toBe(adminId);
+  });
+
+  it('returns 400 for an invalid body', async () => {
+    const res = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Missing everything else' });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('Products - update', () => {
+  it('USER cannot update a product: 403', async () => {
+    const res = await request(app)
+      .patch(`${API}/products/${widget.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ price: 1 });
+    expect(res.status).toBe(403);
+  });
+
+  it('ADMIN updates a product', async () => {
+    const res = await request(app)
+      .patch(`${API}/products/${widget.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ price: 59.99 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.product.price).toBe(59.99);
+  });
+
+  it('ADMIN cannot update an unknown id: 404', async () => {
+    const res = await request(app)
+      .patch(`${API}/products/00000000-0000-0000-0000-000000000000`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ price: 1 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('ADMIN cannot empty-body update: 400', async () => {
+    const res = await request(app)
+      .patch(`${API}/products/${widget.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('Products - delete', () => {
+  it('USER cannot delete a product: 403', async () => {
+    const res = await request(app)
+      .delete(`${API}/products/${widget.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('ADMIN deletes a product with no order history', async () => {
+    const product = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Soon Gone', description: 'x', price: 5, stock: 1 });
+    expect(product.status).toBe(201);
+
+    const res = await request(app)
+      .delete(`${API}/products/${product.body.product.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('ADMIN cannot delete a product with order history: 400 (P2003)', async () => {
+    const product = await request(app)
+      .post(`${API}/products`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'History Product', description: 'sold before', price: 30, stock: 5 });
+
+    await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ customerName: 'Buyer', items: [{ productId: product.body.product.id, quantity: 1 }] });
+
+    const res = await request(app)
+      .delete(`${API}/products/${product.body.product.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/stock to 0/i);
+  });
+
+  it('ADMIN deleting an unknown id returns 404', async () => {
+    const res = await request(app)
+      .delete(`${API}/products/00000000-0000-0000-0000-000000000000`)
+      .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(404);
   });
 });

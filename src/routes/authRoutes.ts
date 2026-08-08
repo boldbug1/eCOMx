@@ -34,6 +34,7 @@ authRouter.post('/register',async (req:Request,res:Response)=>{
         const token = signToken(user);
 
         return res.status(201).json({
+            token,
             message:'User registered'
         })
     }catch(e){

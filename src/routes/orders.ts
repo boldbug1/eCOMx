@@ -1,6 +1,6 @@
 import express from 'express';
 import {Request,Response,Router} from 'express'
-import {OrderSchema} from "../types/order.js"
+import {OrderSchema,OrderInputError} from "../types/order.js"
 import { prisma } from '../db/prisma.js';
 const orderRouter:Router = express.Router();
 import {z} from 'zod'
@@ -23,31 +23,58 @@ orderRouter.post('/orders',requireAuth,requirePermission(PERMISSIONS.orders.crea
     const validatedOrder = result.data;
 
     try{
-        const newOrder = await prisma.order.create({
-            data:{
-                customerName:validatedOrder.customerName,
-                totalAmount:validatedOrder.totalAmount,
-                status:validatedOrder.status,
-                items:{
-                    create:validatedOrder.items,
-                },
-                userId:req.user!.id,
-            },
+        const newOrder = await prisma.$transaction(async (tx) => {
+        const productIds = validatedOrder.items.map((i) => i.productId);
+        const products = await tx.product.findMany({ where: { id: { in: productIds } } });
+        const byId = new Map(products.map((p) => [p.id, p]));
 
-            include:{
-                items:true,
-            }
+        for (const item of validatedOrder.items) {
+        const product = byId.get(item.productId);
+        if (!product) throw new OrderInputError(`Product ${item.productId} does not exist`);
+        if (product.stock < item.quantity)
+            throw new OrderInputError(`Only ${product.stock} left of "${product.name}"`);
+        }
+
+     
+        const totalAmount = validatedOrder.items.reduce(
+        (sum, i) => sum + byId.get(i.productId)!.price * i.quantity, 0);
+
+        const order = await tx.order.create({
+        data: {
+            customerName: validatedOrder.customerName,
+            totalAmount,
+            status: validatedOrder.status,
+            userId: req.user!.id,
+            items: {
+            create: validatedOrder.items.map((i) => ({
+                productId: i.productId,
+                quantity: i.quantity,
+                price: byId.get(i.productId)!.price,   
+            })),
+            },
+        },
+        include: { items: true },
         });
 
-        return res.status(201).json({
-            message:"Order created",
-            order:newOrder
-        })
+        for (const item of validatedOrder.items) {
+        const result = await tx.product.updateMany({
+            where: { id: item.productId, stock: { gte: item.quantity } },
+            data: { stock: { decrement: item.quantity } },
+        });
+        if (result.count === 0) throw new OrderInputError("Stock changed while ordering , try again");
+        }
+
+        return order;
+    }); 
+    return res.status(201).json({
+        order:newOrder,
+        message:"Order created"
+    })  
     }catch(e){
-        console.log("Error creating order: ",e);
-        return res.status(500).json({
-            message:"Internal server error while creating the order",
-        })
+        if (e instanceof OrderInputError) return res.status(400).json({ message: e.message });
+        if (e instanceof Prisma.PrismaClientKnownRequestError) return res.status(400).json({ message: "Invalid order request" });
+        console.log(e);
+        return res.status(500).json({ message: "Internal server error while creating the order" });
     }
 })
 
@@ -132,14 +159,26 @@ try{
     const prismaUpdateData:Prisma.OrderUpdateInput = {...otherFields};
 
     if(items){
+        if (items) {
+        const productIds = items.map((i) => i.productId);
+        const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+        const byId = new Map(products.map((p) => [p.id, p]));
+
+        for (const item of items) {
+            if (!byId.has(item.productId)) {
+            throw new OrderInputError(`Product ${item.productId} does not exist`);
+            }
+        }
+
         prismaUpdateData.items = {
-            deleteMany:{},
-            create:items.map(item=>({
-                productId:item.productId,
-                price:item.price,
-                quantity:item.quantity,
-            }))
+            deleteMany: {},
+            create: items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            price: byId.get(item.productId)!.price,  
+            })),
         };
+        }
     }
 
     
@@ -157,6 +196,7 @@ try{
             message:"Order updated successfully"
         })
     }catch(e){
+        if (e instanceof OrderInputError) return res.status(400).json({ message: e.message });
         if (e instanceof z.ZodError) {
             return res.status(400).json({ errors: e.issues });
         }
