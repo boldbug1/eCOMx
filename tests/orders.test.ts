@@ -303,16 +303,6 @@ describe('Orders - permissions (USER)', () => {
 });
 
 describe('Orders - update (ADMIN)', () => {
-  it('updates the own order (status)', async () => {
-    const res = await request(app)
-      .patch(`${API}/orders/${adminOrderId}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: 'processing' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.order.status).toBe('processing');
-  });
-
   it('replaces items with server-price snapshots', async () => {
     const res = await request(app)
       .patch(`${API}/orders/${adminOrderId}`)
@@ -350,6 +340,16 @@ describe('Orders - update (ADMIN)', () => {
       .send({ status: 'processing' });
 
     expect(res.status).toBe(404);
+  });
+
+  it('updates the own order (status)', async () => {
+    const res = await request(app)
+      .patch(`${API}/orders/${adminOrderId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'processing' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.order.status).toBe('processing');
   });
 });
 
