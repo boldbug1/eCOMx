@@ -6,10 +6,11 @@ import {Prisma} from '@prisma/client'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken';
 import { signToken } from '../services/auth.js';
+import { authLimiter } from '../middleware/rateLimiter.js';
 
 const authRouter:Router = express.Router();
 
-authRouter.post('/register',async (req:Request,res:Response)=>{
+authRouter.post('/register',authLimiter,async (req:Request,res:Response)=>{
     const result = registerSchema.safeParse(req.body);
 
     if(!result.success){
@@ -52,7 +53,7 @@ authRouter.post('/register',async (req:Request,res:Response)=>{
         
 })
 
-authRouter.post('/login',async(req:Request,res:Response)=>{
+authRouter.post('/login',authLimiter,   async(req:Request,res:Response)=>{
     const result = loginSchema.safeParse(req.body);
 
     if(!result.success){

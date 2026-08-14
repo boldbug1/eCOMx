@@ -5,6 +5,8 @@ import {logger} from './middleware/logger.js';
 import authRouter from './routes/authRoutes.js';
 import productsRouter from './routes/products.js';
 import cors,{CorsOptions} from 'cors'
+import { appLimiter } from './middleware/rateLimiter.js';
+import helmet from 'helmet';
 
 export const app:Application = express();
 
@@ -22,9 +24,12 @@ const corsOptions:CorsOptions={
 }
 
 //middleware
+app.use(helmet())
 app.use(cors(corsOptions))
 app.use(express.json())
 app.use(logger);
+app.use(appLimiter);
+app.set('trust proxy',1);
 app.use('/api/v1',orderRouter);
 app.use('/api/v1',authRouter);
 app.use('/api/v1',productsRouter);
