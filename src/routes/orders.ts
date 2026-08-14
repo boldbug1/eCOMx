@@ -166,8 +166,7 @@ orderRouter.patch('/orders/:id', requireAuth, requirePermission(PERMISSIONS.orde
     }
 
     const { items, ...otherFields } = validatedData;
-
-    
+     
     const existing = await prisma.order.findUnique({ where: { id, userId: req.user!.id } });
     if (!existing) return res.status(404).json({ message: "Order to be updated not found" });
 

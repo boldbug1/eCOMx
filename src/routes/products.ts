@@ -6,9 +6,9 @@ import { PERMISSIONS } from '../permissions.js';
 import { ProductSchema } from '../types/product.js';
 import {AuthRequest} from '../middleware/requireAuth.js'
 import { Prisma } from '@prisma/client';
+import {redis} from '../services/redis.js' 
+
 const productsRouter:Router = express.Router();
-
-
 
 productsRouter.get('/products',async (req:Request,res:Response)=>{
     const products = await prisma.product.findMany({});
@@ -20,13 +20,24 @@ productsRouter.get('/products',async (req:Request,res:Response)=>{
 })
 
 productsRouter.get('/products/:id',async (req:Request,res:Response)=>{
-    let id = req.params.id;
+    let id = req.params.id as string;
 
-    if(Array.isArray(id)){
-        id = id[0]
+    const cacheKey = `product:${id}`;//creates cache key
+    const cached = await redis.get(cacheKey);//looks up in cache
+    if(cached){//cache hit
+        try{
+            return res.status(200).json({
+                product:JSON.parse(cached),
+                message:"found"
+            });    
+        }catch(e){
+            console.log(e);
+            return res.status(500).json({
+                message:"Internal server error"
+            })
+        }
     }
-
-    try{
+    try{//cache miss
         const product = await prisma.product.findUnique({
             where:{
                 id:id,
@@ -38,7 +49,8 @@ productsRouter.get('/products/:id',async (req:Request,res:Response)=>{
                 message:"Not found"
             })
         }
-    
+        
+        await redis.set(cacheKey,JSON.stringify(product),"EX",3600);
         return res.status(200).json({
             product:product,
             message:"Product found"
@@ -88,11 +100,7 @@ productsRouter.post('/products',requireAuth,requirePermission(PERMISSIONS.produc
 })
 
 productsRouter.patch('/products/:id',requireAuth,requirePermission(PERMISSIONS.products.update),async(req:AuthRequest,res:Response)=>{
-    let id = req.params.id;
-
-    if(Array.isArray(id)){
-        id = id[0]
-    }
+    let id = req.params.id as string;
 
     const patchSchema = ProductSchema.partial();
     const result = patchSchema.safeParse(req.body);
@@ -120,6 +128,8 @@ productsRouter.patch('/products/:id',requireAuth,requirePermission(PERMISSIONS.p
             }
         })
 
+        await redis.del(`product:${id}`);
+
         return res.status(200).json({
             product:updatedProduct,
             message:"Product updated",
@@ -138,11 +148,8 @@ productsRouter.patch('/products/:id',requireAuth,requirePermission(PERMISSIONS.p
 })
 
 productsRouter.delete('/products/:id',requireAuth,requirePermission(PERMISSIONS.products.delete),async(req:AuthRequest,res:Response)=>{
-    let id = req.params.id;
+    let id = req.params.id as string;
 
-    if(Array.isArray(id)){
-        id = id[0]
-    }
     const usedCount = await prisma.orderItem.count({ where: { productId: id } });
     if (usedCount > 0) {
         return res.status(400).json({ message: "Cannot delete — product has order history. Set stock to 0 instead." });
@@ -153,6 +160,8 @@ productsRouter.delete('/products/:id',requireAuth,requirePermission(PERMISSIONS.
                 id:id,
             }
         })
+
+        await redis.del(`product:${id}`);
 
         return res.status(200).json({
                 product:deletedProduct,
