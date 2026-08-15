@@ -3,13 +3,13 @@ import rateLimit from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import { redis } from "../services/redis.js";
 
-const redisStore = new RedisStore({
-  sendCommand: (...args: string[]) =>
-    (redis as any).call(...args) as Promise<any>,
-});
+const sendCommand = (...args: string[]) => (redis as any).call(...args) as Promise<any>;
 
 export const appLimiter = rateLimit({
-  store: redisStore,
+  store: new RedisStore({
+    sendCommand,
+    prefix:"rl:app"
+  }),
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
@@ -18,7 +18,10 @@ export const appLimiter = rateLimit({
 });
 
 export const authLimiter = rateLimit({
-  store: redisStore,
+  store: new RedisStore({
+    sendCommand,
+    prefix:"rl:auth"
+  }),
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
