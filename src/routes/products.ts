@@ -6,7 +6,7 @@ import { PERMISSIONS } from '../permissions.js';
 import { ProductSchema } from '../types/product.js';
 import {AuthRequest} from '../middleware/requireAuth.js'
 import { Prisma } from '@prisma/client';
-import {redis} from '../services/redis.js' 
+import { getCachedProduct,setCachedProduct,invalidateProduct } from '../services/productCache.js';
 
 const productsRouter:Router = express.Router();
 
@@ -22,21 +22,15 @@ productsRouter.get('/products',async (req:Request,res:Response)=>{
 productsRouter.get('/products/:id',async (req:Request,res:Response)=>{
     let id = req.params.id as string;
 
-    const cacheKey = `product:${id}`;//creates cache key
-    const cached = await redis.get(cacheKey);//looks up in cache
+    const cached = await getCachedProduct(id);
+
     if(cached){//cache hit
-        try{
-            return res.status(200).json({
-                product:JSON.parse(cached),
-                message:"found"
-            });    
-        }catch(e){
-            console.log(e);
-            return res.status(500).json({
-                message:"Internal server error"
-            })
-        }
+        return res.status(200).json({
+            product:cached,
+            message:"found"
+        })
     }
+
     try{//cache miss
         const product = await prisma.product.findUnique({
             where:{
@@ -50,7 +44,7 @@ productsRouter.get('/products/:id',async (req:Request,res:Response)=>{
             })
         }
         
-        await redis.set(cacheKey,JSON.stringify(product),"EX",3600);
+        await setCachedProduct(id,product);
         return res.status(200).json({
             product:product,
             message:"Product found"
@@ -128,7 +122,7 @@ productsRouter.patch('/products/:id',requireAuth,requirePermission(PERMISSIONS.p
             }
         })
 
-        await redis.del(`product:${id}`);
+        await invalidateProduct(id);
 
         return res.status(200).json({
             product:updatedProduct,
@@ -161,7 +155,7 @@ productsRouter.delete('/products/:id',requireAuth,requirePermission(PERMISSIONS.
             }
         })
 
-        await redis.del(`product:${id}`);
+        await invalidateProduct(id);
 
         return res.status(200).json({
                 product:deletedProduct,
