@@ -1,6 +1,6 @@
 # eCOMx
 
-A REST API for a multi-user ecommerce backend — customer orders linked to authenticated users, a manager-administered product catalog, role-based access control, and oversell-proof transactional ordering. Built with **Express**, **TypeScript**, **Prisma ORM 7**, and **Zod**.
+A REST API for a multi-user ecommerce backend customer orders linked to authenticated users, a manager-administered product catalog, role-based access control, and oversell-proof transactional ordering. Built with **Express**, **TypeScript**, **Prisma ORM 7**, and **Zod**.
 
 ## Tech Stack
 
