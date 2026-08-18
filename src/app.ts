@@ -7,6 +7,8 @@ import productsRouter from "./routes/products.js";
 import cors, { CorsOptions } from "cors";
 import { appLimiter } from "./middleware/rateLimiter.js";
 import helmet from "helmet";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import cartRouter from "./routes/cart.js";
 
 export const app: Application = express();
 
@@ -33,6 +35,7 @@ app.set("trust proxy", 1);
 app.use("/api/v1", orderRouter);
 app.use("/api/v1", authRouter);
 app.use("/api/v1", productsRouter);
+app.use("/api/v1", cartRouter);
 
 app.get("/", (req: Request, res: Response) => {
   return res.status(200).json({
@@ -40,3 +43,6 @@ app.get("/", (req: Request, res: Response) => {
     State: "Running",
   });
 });
+
+app.use(notFoundHandler);
+app.use(errorHandler);

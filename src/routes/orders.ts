@@ -339,6 +339,12 @@ orderRouter.delete(
         message: "Order canceled succesfully",
       });
     } catch (e) {
+      if (e instanceof OrderInputError) {
+        if (e.message === "Order not found") {
+          return res.status(404).json({ message: e.message });
+        }
+        return res.status(400).json({ message: e.message });
+      }
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === "P2025") {
           return res.status(404).json({

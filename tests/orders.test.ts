@@ -354,9 +354,19 @@ describe('Orders - update (ADMIN)', () => {
 });
 
 describe('Orders - delete (ADMIN)', () => {
+  let deleteOrderId: string;
+
+  beforeAll(async () => {
+    const res = await request(app)
+      .post(`${API}/orders`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(orderBody(widget.id, 1));
+    deleteOrderId = res.body.order.id;
+  });
+
   it('deletes the own order', async () => {
     const res = await request(app)
-      .delete(`${API}/orders/${adminOrderId}`)
+      .delete(`${API}/orders/${deleteOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
@@ -372,7 +382,7 @@ describe('Orders - delete (ADMIN)', () => {
 
   it('deleting an already deleted order returns 404', async () => {
     const res = await request(app)
-      .delete(`${API}/orders/${adminOrderId}`)
+      .delete(`${API}/orders/${deleteOrderId}`)
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(404);
