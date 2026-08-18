@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+.git
+.env
+tests
+*.log
+.gitattributes
+.gitignore
+Dockerfile
+docker-compose.yml
+.github
+.agents
+.claude
+.windsurf
